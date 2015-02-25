@@ -5,44 +5,42 @@ import me.dylan.needle.logging.Logger;
 import me.dylan.needle.networking.Prod;
 import me.dylan.needle.networking.Syringe;
 import me.dylan.needle.scraper.Scraper;
+import sun.rmi.runtime.Log;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Needle {
     private String ip = "";
-    private List<Integer> openPorts = new ArrayList<>();
+    private Map<String, List<Integer>> openPorts = new HashMap<>();
     private static final int TIMEOUT = 5000;
     public static int currentPort = 0;
     private int delay = 0;
 
     public Needle() {
-        String scrapeStr = Input.prompt("Would you like to scrape for servers or specify one yourself? ");
+        Logger.info("_.-=======~Needle Scanning Utility~========-._");
+        Logger.info("We're going to begin scanning soon, but first we need some info!");
+        Logger.info("");
+        Logger.info("");
+        String scrapeStr = Input.prompt("Would you like to scrape for servers(otherwise you will need to specify one yourself)? ");
+        String port = Input.prompt("Please enter a port or a port range to check(1-65535): ");
+        delay = Integer.parseInt(Input.prompt("Please enter a delay value(ms): "));
+        int threads = Integer.parseInt(Input.prompt("Enter an amount of threads to use: "));
 
         while(true) {
-            if(scrapeStr.toLowerCase().contains("scrape")) {
+            if(scrapeStr.toLowerCase().contains("yes")) {
                 try {
                     for (String address : Scraper.getIpsFromMCSL()) {
-                        hostStatus(address);
+                        hostStatus(address, port, threads);
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             } else {
-                hostStatus(Input.prompt("Enter a server address: "));
-            }
-
-            if(!openPorts.isEmpty()) {
-                Logger.info("_.-=======~Needle scan results~========-._");
-                System.out.println();
-                System.out.println();
-                Logger.info("_.-=========~Open ports~==============-._");
-                for(Integer integer : openPorts) {
-                    Logger.info("\n             " + integer.toString());
-                }
-            } else {
-                Logger.log("_.-========~No Ports found~===========-._", LogLevel.INFO);
+                hostStatus(Input.prompt("Enter a server address: "), port, threads);
             }
 
 
@@ -56,10 +54,9 @@ public class Needle {
 
     }
 
-    public void hostStatus(String ip) {
+    public void hostStatus(String ip, String ports, int threads) {
         this.ip = ip;
 //        ip = Input.prompt("Please enter an IP for prodding: ");
-        int threads = Integer.parseInt(Input.prompt("Enter an amount of threads to use: "));
         Logger.log("Prodding IP address " + ip, LogLevel.INFO);
         try {
             if(!Prod.prodIp(ip, TIMEOUT)) {
@@ -71,8 +68,9 @@ public class Needle {
             Logger.log("Reason: " + e.toString(), LogLevel.DEBUG);
             return;
         }
+
         try {
-            prodPorts(threads);
+            prodPorts(threads, ip, ports);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -86,51 +84,63 @@ public class Needle {
         currentPort++;
     }
 
-     public void prodPorts(int threads) throws Exception {
+     public void prodPorts(int threads, String host, String port) throws Exception {
             boolean success = false;
             while(!success) {
-                String port = Input.prompt("Please enter a port or a port range to check(1-65535): ");
                 if(port.contains("-")) {
                     try {
                         final int start = Integer.parseInt(port.split("-")[0]);
                         final int end = Integer.parseInt(port.split("-")[1]);
-                        delay = Integer.parseInt(Input.prompt("Please enter a delay value(ms): "));
                         currentPort = start;
-                        Input.prompt("Beginning port scan, press enter to confirm");
-
+                        String allowScan = Input.prompt("Beginning port scan for host " + host + ", press enter to confirm or type 'skip' to skip.");
+                        if(allowScan.equals("skip")) {
+                            return;
+                        }
                         List<Thread> threadsList = new ArrayList<>();
 
                         for(int j = 0; j < threads; j++) {
 
-                            Thread thread = new Thread(new Runnable() {
+                            final Thread thread = new Thread() {
 
                                 @Override
                                 public void run() {
-
-                                    while(true) {
+                                    while (!this.isInterrupted()) {
                                         int portSynced = getCurrentPort();
                                         if (portSynced < end) {
                                             Logger.log("Prodding port " + portSynced, LogLevel.INFO);
                                             try {
-                                                prodPort(portSynced);
+                                                prodPort(portSynced++);
                                                 Thread.sleep(delay);
                                             } catch (InterruptedException e) {
                                                 e.printStackTrace();
                                             }
                                             incrementCurrentPort();
+                                        } else {
+                                            this.interrupt();
                                         }
 
                                     }
 
                                 }
-
-                            });
+                            };
 
                             threadsList.add(thread);
                             thread.start();
                         }
                         for(Thread thread : threadsList) {
                             thread.join();
+                        }
+
+                        if(!openPorts.isEmpty()) {
+                            Logger.info("_.-=======~Needle scan results~========-._");
+                            System.out.println();
+                            System.out.println();
+                            Logger.info("_.-=========~Open ports~==============-._");
+                            for(String key : openPorts.keySet()) {
+                                Logger.info("\n             " + key);
+                            }
+                        } else {
+                            Logger.log("_.-========~No Ports found~===========-._", LogLevel.INFO);
                         }
                         success = true;
 
