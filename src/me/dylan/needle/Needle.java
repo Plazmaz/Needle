@@ -172,7 +172,7 @@ public class Needle {
             if (Prod.prodPort(ip, port, TIMEOUT)) {
                 Logger.info(Syringe.mcPing(ip, port));   //throws ioexception
                 Logger.info("Found Minecraft listener on port " + port);
-                openPorts.add(port);
+                openPorts.get(ip).add(port);
             }
             Thread.sleep(delay);
         } catch(IOException e) {}
